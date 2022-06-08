@@ -25,7 +25,7 @@ class ResponseTypeError(TypeError):
 class ResponseValueError(Exception):
     '''
     Класс для обработки исключений в случае,
-    если response не содержит данных.
+    если response не содержит данных
     '''
     txt: str
 
