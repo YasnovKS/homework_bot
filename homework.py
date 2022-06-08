@@ -143,9 +143,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """
-    Функция проверяет доступность переменных окружения.
-    """
+    """Функция проверяет доступность переменных окружения."""
     logger.info('Проверка переменных окружения...')
     vars = {'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
             'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
