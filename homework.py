@@ -1,5 +1,6 @@
 import logging
 import os
+import sys
 import time
 from http import HTTPStatus
 
@@ -7,15 +8,21 @@ import requests
 import telegram
 from dotenv import load_dotenv
 
-from exceptions import (NotFoundError, ResponseTypeError,
-                        ResponseValueError, NotListResultError,
-                        CustomKeyError, StatusError, UpdateError)
+from exceptions import (CustomKeyError, NotFoundError, NotListResultError,
+                        ResponseTypeError, ResponseValueError, StatusError,
+                        UpdateError)
 
 load_dotenv()
 
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler(stream=sys.stdout)
+formatter = logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -52,10 +59,10 @@ EXCEPTIONS = {
 def send_message(bot, message: str):
     """Отправляет пользователю текстовое сообщение."""
     try:
-        logging.info('Попытка отправить сообщение.')
+        logger.info('Попытка отправить сообщение.')
         bot.send_message(chat_id=TELEGRAM_CHAT_ID,
                          text=message)
-        logging.info('Сообщение успешно отправлено!')
+        logger.info('Сообщение успешно отправлено!')
     except Exception:
         logging.error('Невозможно отправить сообщение!')
 
@@ -68,19 +75,19 @@ def get_api_answer(current_timestamp):
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
-        logging.info('Попытка получить данные из API...')
+        logger.info('Попытка получить данные из API...')
         response = requests.get(ENDPOINT,
                                 headers=HEADERS,
                                 params=params
                                 )
         if response.status_code != HTTPStatus.OK:
-            logging.error(f'Сервер недоступен {response.status_code}')
+            logger.error(f'Сервер недоступен {response.status_code}')
             raise NotFoundError('Не удалось подключиться к API.')
     except Exception:
         raise NotFoundError('Не удалось подключиться к API.')
     # Сбрасываем ошибку подключения к API, если она была ранее:
     EXCEPTIONS['NotFoundError'] = False
-    logging.info('Запрос к API успешно выполнен.')
+    logger.info('Запрос к API успешно выполнен.')
     return response.json()
 
 
@@ -89,7 +96,7 @@ def check_response(response):
     Функция проверяет корректность ответа API и
     возвращает его для дальнейшей обработки.
     """
-    logging.info('Начало обработки данных из запроса...')
+    logger.info('Начало обработки данных из запроса...')
     # Проверяем, что в ответе API нам возвращается словарь:
     if not isinstance(response, dict):
         raise ResponseTypeError('Запрос к API вернул не то, что ожидалось')
@@ -107,7 +114,7 @@ def check_response(response):
         raise NotListResultError('Объект "homework" не является списком')
     # Сбрасываем возможную ошибку несоответствия типа данных классу list:
     EXCEPTIONS['NotListResultError'] = False
-    logging.info('Данные успешно обработаны.')
+    logger.info('Данные успешно обработаны.')
     return homework
 
 
@@ -116,9 +123,7 @@ def parse_status(homework):
     Функция достает из ответа API данные о названии и статусе
     домашнего задания
     """
-    logging.info('Получение данных о названии и статусе домашней работы...')
-    if not homework:
-        raise UpdateError('На данный момент нет обновлений.')
+    logger.info('Получение данных о названии и статусе домашней работы...')
     # Сбрасываем ошибку, если ранее статус отсутствовал в словаре:
     EXCEPTIONS['UpdateError'] = False
     homework_name = homework.get('homework_name')
@@ -130,7 +135,7 @@ def parse_status(homework):
                           f'статус {homework_status}')
 
     verdict = HOMEWORK_STATUSES.get(homework_status)
-    logging.info('Имя и статус домашней работы получены.')
+    logger.info('Имя и статус домашней работы получены.')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -139,16 +144,16 @@ def check_tokens():
     Функция проверяет доступность переменных окружения
     для корректной работы бота.
     """
-    logging.info('Проверка переменных окружения...')
+    logger.info('Проверка переменных окружения...')
     vars = {'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
             'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
             'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
             }
     for name, var in vars.items():
         if not var:
-            logging.critical(f'Отсутствует переменная окружения {name}')
+            logger.critical(f'Отсутствует переменная окружения {name}')
             return False
-    logging.info('Переменные окружения успешно проверены.')
+    logger.info('Переменные окружения успешно проверены.')
     return True
 
 
@@ -163,7 +168,11 @@ def main():
             try:
                 response = get_api_answer(current_timestamp)
                 homework = check_response(response)
-                message = parse_status(homework[0])
+                if not homework:
+                    logger.debug('Новые статусы домашних работ отсутствуют.')
+                    raise UpdateError('На данный момент нет обновлений.')
+                else:
+                    message = parse_status(homework[0])
                 send_message(bot, message)
                 current_timestamp = response.get('current_date')
                 time.sleep(RETRY_TIME)
@@ -171,10 +180,10 @@ def main():
             except (NotFoundError, ResponseValueError,
                     NotListResultError, ResponseTypeError,
                     KeyError, CustomKeyError) as error:
-                logging.error('В результате работы бота '
-                              'возникла ошибка: '
-                              f'{type(error).__name__}: {error}'
-                              )
+                logger.error('В результате работы бота '
+                             'возникла ошибка: '
+                             f'{type(error).__name__}: {error}'
+                             )
                 if not EXCEPTIONS[type(error).__name__]:
                     message = ('В результате работы бота возникла '
                                f'ошибка: {error}')
@@ -183,7 +192,7 @@ def main():
                 time.sleep(RETRY_TIME)
 
             except UpdateError as error:
-                logging.info(f'{type(error).__name__}: {error}')
+                logger.debug(f'{type(error).__name__}: {error}')
                 if not EXCEPTIONS[type(error).__name__]:
                     message = (f'{error}')
                     send_message(bot, message)
@@ -191,8 +200,8 @@ def main():
                 time.sleep(RETRY_TIME)
             except Exception as error:
                 message = f'Сбой в работе программы: {error}'
-                logging.error('В результате работы бота возникла '
-                              f'ошибка: {type(error).__name__}: {error}')
+                logger.error('В результате работы бота возникла '
+                             f'ошибка: {type(error).__name__}: {error}')
                 time.sleep(RETRY_TIME)
         else:
             break
