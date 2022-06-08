@@ -34,6 +34,10 @@ HOMEWORK_STATUSES = {
 
 # В переменной EXCEPTIONS будет содержаться информация об ошибках,
 # возникающих во время работы бота.
+# Каждая отдельная ошибка будет проверяться в обработчике на дублирование.
+# Если ошибка не была устранена и она возникает снова, сообщение о ней не
+# будет отправлено пользователю, пока не случится успешный вызов функции, из
+# которой она была вызвана
 EXCEPTIONS = {
     'NotFoundError': False,
     'ResponseTypeError': False,
@@ -47,8 +51,13 @@ EXCEPTIONS = {
 
 def send_message(bot, message: str):
     """Отправляет пользователю текстовое сообщение."""
-    bot.send_message(chat_id=TELEGRAM_CHAT_ID,
-                     text=message)
+    try:
+        logging.info('Попытка отправить сообщение.')
+        bot.send_message(chat_id=TELEGRAM_CHAT_ID,
+                         text=message)
+        logging.info('Сообщение успешно отправлено!')
+    except Exception:
+        logging.error('Невозможно отправить сообщение!')
 
 
 def get_api_answer(current_timestamp):
@@ -58,16 +67,21 @@ def get_api_answer(current_timestamp):
     """
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
-    response = requests.get(ENDPOINT,
-                            headers=HEADERS,
-                            params=params
-                            )
-    if response.status_code != HTTPStatus.OK:
+    try:
+        logging.info('Попытка получить данные из API...')
+        response = requests.get(ENDPOINT,
+                                headers=HEADERS,
+                                params=params
+                                )
+        if response.status_code != HTTPStatus.OK:
+            logging.error(f'Сервер недоступен {response.status_code}')
+            raise NotFoundError('Не удалось подключиться к API.')
+    except Exception:
         raise NotFoundError('Не удалось подключиться к API.')
     # Сбрасываем ошибку подключения к API, если она была ранее:
     EXCEPTIONS['NotFoundError'] = False
-    response = response.json()
-    return response
+    logging.info('Запрос к API успешно выполнен.')
+    return response.json()
 
 
 def check_response(response):
@@ -75,6 +89,7 @@ def check_response(response):
     Функция проверяет корректность ответа API и
     возвращает его для дальнейшей обработки.
     """
+    logging.info('Начало обработки данных из запроса...')
     # Проверяем, что в ответе API нам возвращается словарь:
     if not isinstance(response, dict):
         raise ResponseTypeError('Запрос к API вернул не то, что ожидалось')
@@ -92,6 +107,7 @@ def check_response(response):
         raise NotListResultError('Объект "homework" не является списком')
     # Сбрасываем возможную ошибку несоответствия типа данных классу list:
     EXCEPTIONS['NotListResultError'] = False
+    logging.info('Данные успешно обработаны.')
     return homework
 
 
@@ -100,12 +116,13 @@ def parse_status(homework):
     Функция достает из ответа API данные о названии и статусе
     домашнего задания
     """
+    logging.info('Получение данных о названии и статусе домашней работы...')
     if not homework:
         raise UpdateError('На данный момент нет обновлений.')
     # Сбрасываем ошибку, если ранее статус отсутствовал в словаре:
     EXCEPTIONS['UpdateError'] = False
-    homework_name = homework[0].get('homework_name')
-    homework_status = homework[0].get('status')
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
     # Сбрасываем ошибку, если ранее статус отсутствовал в словаре:
     EXCEPTIONS['StatusError'] = False
     if homework_status not in HOMEWORK_STATUSES.keys():
@@ -113,6 +130,7 @@ def parse_status(homework):
                           f'статус {homework_status}')
 
     verdict = HOMEWORK_STATUSES.get(homework_status)
+    logging.info('Имя и статус домашней работы получены.')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -121,6 +139,7 @@ def check_tokens():
     Функция проверяет доступность переменных окружения
     для корректной работы бота.
     """
+    logging.info('Проверка переменных окружения...')
     vars = {'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
             'TELEGRAM_TOKEN': TELEGRAM_TOKEN,
             'TELEGRAM_CHAT_ID': TELEGRAM_CHAT_ID
@@ -129,6 +148,7 @@ def check_tokens():
         if not var:
             logging.critical(f'Отсутствует переменная окружения {name}')
             return False
+    logging.info('Переменные окружения успешно проверены.')
     return True
 
 
@@ -143,7 +163,7 @@ def main():
             try:
                 response = get_api_answer(current_timestamp)
                 homework = check_response(response)
-                message = parse_status(homework)
+                message = parse_status(homework[0])
                 send_message(bot, message)
                 current_timestamp = response.get('current_date')
                 time.sleep(RETRY_TIME)
