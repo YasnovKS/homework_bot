@@ -69,6 +69,7 @@ def send_message(bot, message: str):
 
 def get_api_answer(current_timestamp):
     """
+    Получение данных от API.
     Функция обращается к API-сервису и возвращает информацию
     о статусе домашней работы.
     """
@@ -93,6 +94,7 @@ def get_api_answer(current_timestamp):
 
 def check_response(response):
     """
+    Обработка данных, полученных от API.
     Функция проверяет корректность ответа API и
     возвращает его для дальнейшей обработки.
     """
@@ -120,6 +122,7 @@ def check_response(response):
 
 def parse_status(homework):
     """
+    Обработка списка данных о домашнем задании.
     Функция достает из ответа API данные о названии и статусе
     домашнего задания
     """
@@ -141,8 +144,7 @@ def parse_status(homework):
 
 def check_tokens():
     """
-    Функция проверяет доступность переменных окружения
-    для корректной работы бота.
+    Функция проверяет доступность переменных окружения.
     """
     logger.info('Проверка переменных окружения...')
     vars = {'PRACTICUM_TOKEN': PRACTICUM_TOKEN,
@@ -159,7 +161,6 @@ def check_tokens():
 
 def main():
     """Основная логика работы бота."""
-
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
 
