@@ -109,11 +109,9 @@ def check_response(response):
     # Сбрасываем возможные ошибки, если они были ранее:
     EXCEPTIONS['ResponseTypeError'] = False
     EXCEPTIONS['ResponseValueError'] = False
-    homework = response.get('homeworks',
-                            KeyError('Ответ от API не содержит '
-                                     'ключа "homeworks"'
-                                     )
-                            )
+    homework = response.get('homeworks')
+    if homework is None:
+        raise KeyError('Ответ от API не содержит ключа "homeworks".')
     if not isinstance(homework, list):
         raise NotListResultError('Объект "homework" не является списком')
     # Сбрасываем возможную ошибку несоответствия типа данных классу list:
